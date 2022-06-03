@@ -406,4 +406,93 @@ SELECT
       ) pt     
       left join product p on pt.maker=p.maker and pt.type=p.type
   )as p
-59. 
+59. select A.point, 
+       case when o is null then i 
+            else i - o 
+            end 
+FROM  (select point, sum(inc) as i 
+       from Income_o 
+       group by point) as A 
+left join (select point, sum(out) as o
+           from Outcome_o 
+           group by point) as B 
+on A.point=B.point
+60.select A.point, 
+       case when o is null then i 
+            else i - o 
+            end 
+FROM  (select point, sum(inc) as i 
+       from Income_o 
+       where date<'2001-04-15'
+       group by point) as A 
+left join (select point, sum(out) as o
+           from Outcome_o
+           where date<'2001-04-15'
+           group by point) as B 
+on A.point=B.point
+61.SELECT SUM(res.rest) FROM
+(select A.point, 
+       case when o is null then i 
+            else i - o 
+            end 
+       as rest
+FROM  (select point, sum(inc) as i 
+       from Income_o 
+       group by point) as A 
+left join (select point, sum(out) as o
+           from Outcome_o
+           group by point) as B 
+on A.point=B.point) res
+62.SELECT SUM(res.rest) FROM
+(select A.point, 
+       case when o is null then i 
+            else i - o 
+            end 
+       as rest
+FROM  (select point, sum(inc) as i 
+       from Income_o 
+       where date<'2001-04-15'
+       group by point) as A 
+left join (select point, sum(out) as o
+           from Outcome_o
+           where date<'2001-04-15'
+           group by point) as B 
+on A.point=B.point) res
+63.select name from passenger
+where id_psg in (
+  select p.id_psg
+  from pass_in_trip p
+  group by p.id_psg, p.place
+  having count(place) > 1)
+64.Select income.point, income.date, 'inc', sum(income.inc) 
+from income 
+left join outcome
+on income.point=outcome.point and income.date=outcome.date 
+where outcome.date is null  
+group by income.point, income.date 
+
+union 
+
+Select outcome.point, outcome.date, 'out', sum(outcome.out) 
+from income 
+right join outcome 
+on income.point=outcome.point and income.date=outcome.date 
+where income.date is null 
+group by outcome.point, outcome.date
+65.select row_number() over (order by maker) num, maker2 maker, type 
+from
+(select maker, maker2 =
+                 case row_number() over (partition by maker 
+                                         order by CASE
+                                                  WHEN type = 'PC' THEN 1
+                                                  WHEN type = 'Laptop' THEN 2
+                                                  WHEN type = 'Printer' THEN 3
+                                                  ELSE 4
+                                                  END)
+
+                                          when 1 then maker
+                                          else ''
+                                          end
+              , type
+from (select distinct maker, type
+      from product) x) y
