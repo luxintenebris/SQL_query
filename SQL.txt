@@ -925,4 +925,237 @@ From
 	Trip t2,
 	Trip t3
 Where t1.trip_no < t2.trip_no and t2.trip_no < t3.trip_no
-104.
+104.with a as(
+select x.class,x.numGuns,row_number()over(partition by x.class order by x.numguns)n
+from Classes x,classes y
+where x.type='bc')
+select distinct class,'bc-'+cast(n as char(2))
+from a where numguns >= n
+105.Select
+	maker, 
+	model,
+	row_number() over(order by maker, model) as Alice,
+	dense_rank() over(order by maker) as Bella,
+	rank() over(order by maker) as Vika,
+	count(*) over(order by maker) as Galina
+From
+	Product
+106.with a as(
+select *,row_number()over(order by b_datetime,b_q_id,b_v_id) n from utb)
+select b_datetime,b_q_id,b_v_id,b_vol,
+cast(exp(sm1)/exp(sm2) as numeric(12,8))k
+from a x
+cross apply
+(select sum (iif(n%2<> 0,log(b_vol),0)) sm1,sum( iif(n%2=0,log(b_vol),0)) sm2 from a where n<=x.n)y
+107.Select name, trip_no, date
+from(
+select row_number() over(order by date+time_out,ID_psg) rn,name,Trip.trip_no,date
+from Company,Pass_in_trip,Trip
+where Company.ID_comp=Trip.ID_comp and Trip.trip_no=Pass_in_trip.trip_no
+  and town_from='Rostov' and year(date)=2003 and month(date)=4)_
+where rn=5
+108.SELECT DISTINCT b1.B_VOL, b2.b_vol, b3.b_vol 
+FROM utb b1, utb b2, utb b3
+WHERE b1.B_VOL < b2.B_VOL AND b2.B_VOL < b3.B_VOL
+AND NOT ( b3.B_VOL > SQRT( SQUARE(b1.B_VOL) + SQUARE(b2.B_VOL)))
+109.SELECT A.Q_NAME AS q_name,
+       A.Whites AS Whites,
+       A.Cnt - A.Whites AS Blacks
+FROM (SELECT Q.Q_ID,
+               Q.Q_NAME,
+               (SUM(SUM(B.B_VOL)) OVER())/765 AS Whites,
+               COUNT(*) OVER() AS Cnt
+        FROM utQ AS Q
+               LEFT JOIN utB AS B
+                      ON Q.Q_ID = B.B_Q_ID
+        GROUP BY Q.Q_ID,
+                  Q.Q_NAME
+        HAVING SUM(B.B_VOL) = 765
+                OR SUM(B.B_VOL) IS NULL) AS A
+110.select name from passenger where id_psg in
+ (select id_psg
+  from pass_in_trip pit join trip t on pit.trip_no = t.trip_no
+  where time_in < time_out and datepart(dw, date) = 7
+ )
+111.WITH t1 AS (SELECT q.*, 
+COALESCE((SELECT SUM(b_vol) FROM utb b WHERE b.b_q_id = q.q_id AND b.b_v_id IN (SELECT v.v_id FROM utv v WHERE v.v_color = 'r')), 0) r,
+COALESCE((SELECT SUM(b_vol) FROM utb b WHERE b.b_q_id = q.q_id AND b.b_v_id IN (SELECT v.v_id FROM utv v WHERE v.v_color = 'g')), 0) g,
+COALESCE((SELECT SUM(b_vol) FROM utb b WHERE b.b_q_id = q.q_id AND b.b_v_id IN (SELECT v.v_id FROM utv v WHERE v.v_color = 'b')), 0) b
+FROM utq q
+)
+
+SELECT q_name, r qty FROM t1
+WHERE t1.r = t1.g AND
+t1.r = t1.b
+AND t1.r != 0 AND t1.r != 255
+112.with cte as (
+select ((count(distinct [V_ID]) * 255 - sum([B_VOL]))/ 255) as fv
+from utv left join [dbo].[utB] on [utB].[B_V_ID] = [utV].[V_ID]
+group by [V_COLOR])
+select iif(count(*)=3,min(fv),0) as qty from cte
+113.with cte1 as (
+select 
+     iif(v_color = 'R',
+           (select count (*) from utQ) * 255- sum(coalesce([B_VOL],0)),
+           0) as r,
+     iif(v_color = 'G',
+           (select count (*) from utQ) * 255- sum(coalesce([B_VOL],0)),
+           0) as g,
+     iif(v_color = 'B',
+           (select count (*) from utQ) * 255- sum(coalesce([B_VOL],0)),
+           0) as b
+from utv, utB
+where  utb.b_v_ID = utv.v_ID
+group by v_color
+)
+select sum(r), sum(g), sum(b) from cte1
+114.WITH b AS
+(SELECT ID_psg, COUNT(*) as cnt FROM Pass_In_Trip GROUP BY ID_psg, place),
+b1 AS
+(SELECT DISTINCT ID_psg, cnt FROM b WHERE cnt =(SELECT MAX(cnt) FROM b))
+SELECT name, cnt FROM b1 JOIN Passenger p ON (b1.ID_psg = p.ID_psg)
+115.SELECT
+    DISTINCT
+    b1.b_vol,
+    b2.b_vol,
+    b3.b_vol,
+    CAST(SQRT(1.0 * b1.b_vol * b2.b_vol) / 2 AS NUMERIC(8, 2))
+FROM 
+    utB b1,
+    utB b2,
+    utB b3
+WHERE 
+    b1.b_vol < b2.b_vol and
+    b3.b_vol = (1.0 * b1.b_vol + 1.0 * b2.b_vol) / 2
+116.WITH cte AS (SELECT B_DATETIME, 
+	DATEADD(ss, -1 * DENSE_RANK() OVER(ORDER BY B_DATETIME), B_DATETIME) AS grp
+	FROM utB
+)
+
+SELECT MIN(B_DATETIME), MAX(B_DATETIME)
+FROM cte
+GROUP BY grp
+HAVING COUNT(DISTINCT B_DATETIME) >  1
+117.Select top 1 with ties country, x, n
+ from classes
+cross apply(values(numguns*5000,'numguns')
+                  ,(bore*3000,'bore')
+                  ,(displacement,'displacement'))V(x,n)
+group by country, x, n
+order by rank()over(partition by country order by x desc)
+118.select 
+	name,
+	CAST(date AS DATE) date, 
+	case 
+		when date>=dmin 
+		then dmax 
+		else dmin 
+	end
+from 
+(	
+	select  name, date,
+		DATEFROMPARTS(y1,4, (y1/2+y1/100-y1/400-5)%7+2) dmin,
+                DATEFROMPARTS (y2,4,(y2/2+y2/100-y2/400-5)%7+2) dmax
+	from
+	(
+		select name, date,
+			y1+4*(sign(y1%400)*(sign(y1%100)-1)) y1,
+                        y2-4*(sign(y2%400)*(sign(y2%100)-1)) y2
+		from (
+			select name, date, 
+			year(date)/4*4 y1, year(date)/4*4 +4 y2
+			from Battles
+		)t
+ 	)t
+)t
+119.select coalesce(y,m,d) period, sum(b_vol) b_vol
+from (
+select B_DATETIME,sum(b_vol) b_vol
+,convert(char(4),B_DATETIME,120) y
+,convert(char(7),B_DATETIME,120) m
+,convert(char(10),B_DATETIME,120) d
+from utB group by B_DATETIME
+) a
+group by grouping sets((y),(m),(d))
+having count(B_DATETIME)> 10
+120.With t as
+(Select ID_comp, convert(numeric(18,2), Case when time_in > = time_out
+    Then datediff(minute, time_out, time_in)
+    Else datediff(minute, time_out, dateadd(day, 1, time_in))
+   End) as trmin
+From (Select trip_no
+ From Pass_in_trip
+ Group by trip_no, [date]) pt join Trip t on pt.trip_no = t.trip_no
+)
+
+Select Coalesce(c.name, 'TOTAL'), A_mean, G_mean, Q_mean, H_mean
+From (
+ Select Id_comp ,
+  convert(numeric(18,2), avg(trmin)) A_mean,
+  convert(numeric(18,2), Exp(avg(Log(trmin)))) G_mean,
+  convert(numeric(18,2), sqrt(avg(trmin*trmin))) Q_mean,
+  convert(numeric(18,2), count(*)/sum(1/trmin)) H_mean
+ From t
+ Group by ID_comp
+ with cube) as a left join Company c on a.ID_comp = c.ID_comp
+121.select  [name]
+from    [dbo].[Ships]
+where   [launched] < 1941
+union 
+select  [ship]
+from    [dbo].[Outcomes]
+        join [dbo].[Battles] on [name] = [battle]
+where   [date] < '19410101'
+union 
+select  [ship]
+from    [dbo].[Outcomes]
+where   [ship] in (select [class]
+                 from   [dbo].[Ships]
+                 where  [launched] < 1941)
+union 
+select  [ship]
+from    [dbo].[Outcomes]
+where   [ship] in (select [class]
+                 from   [dbo].[Ships]
+                        join [dbo].[Outcomes] on [Ships].[name] = [Outcomes].[ship]
+                        join [dbo].[Battles] on [Battles].[name] = [Outcomes].[battle]
+                 where  [date] < '19410101')
+union
+select  [name]
+from    [dbo].[Ships]
+where   [name] in (select [class]
+                   from   [dbo].[Ships]
+                   where  [launched] < 1941)
+union
+select  [name]
+from    [dbo].[Ships]
+where   [name] in (select [class]
+                 from   [dbo].[Ships]
+                        join [dbo].[Outcomes] on [Ships].[name] = [ship]
+                        join [dbo].[Battles] on [Battles].[name] = [battle]
+                 where  [date] < '19410101')
+122.with cta as (
+select [ID_psg], [town_from], [town_to], [date] + [time_out] as date_out,
+min([date] + [time_out]) over (partition by [dbo].[Pass_in_trip].[ID_psg]) mnd,
+max([date] + [time_out]) over (partition by [dbo].[Pass_in_trip].[ID_psg]) mxd
+from [dbo].[Pass_in_trip] join [dbo].[Trip] on [Trip].[trip_no] = [Pass_in_trip].[trip_no])
+select [dbo].[Passenger].[name], [jta].[b_town]
+from (
+select [cta].[ID_psg], [cta].[town_from] as b_town
+from cta where [cta].[date_out] = [cta].[mnd]) jta join (
+select [cta].[ID_psg], [cta].[town_to] as c_town
+from cta where [cta].[date_out] = [cta].[mxd]) jtb on [jtb].[ID_psg] = [jta].[ID_psg] 
+join [dbo].[Passenger] on [Passenger].[ID_psg] = [jta].[ID_psg]
+where [jta].[b_town] <> [jtb].[c_town]
+123.with cta as (
+select [maker], coalesce([dbo].[PC].[price], coalesce([dbo].[Laptop].[price], [dbo].[Printer].[price])) price, count(*) pc
+from [dbo].[Product] left join [dbo].[PC] on [PC].[model] = [Product].[model]
+left join [dbo].[Laptop] on [Laptop].[model] = [Product].[model]
+left join [dbo].[Printer] on [Printer].[model] = [Product].[model]
+where [PC].[price] is not null or [Laptop].[ram] is not null or [Printer].[price] is not null
+group by [maker], coalesce([dbo].[PC].[price], coalesce([dbo].[Laptop].[price], [dbo].[Printer].[price]))
+having count(*) > 1),
+ctm as (select distinct maker from [dbo].[Product])
+select [ctm].[maker], sum(coalesce(pc,0)) as mc, count(price) as pc
+from ctm left join cta on [cta].[maker] = [ctm].[maker]
+group by [ctm].[maker]
