@@ -925,12 +925,13 @@ From
 	Trip t2,
 	Trip t3
 Where t1.trip_no < t2.trip_no and t2.trip_no < t3.trip_no
-104.with a as(
-select x.class,x.numGuns,row_number()over(partition by x.class order by x.numguns)n
-from Classes x,classes y
-where x.type='bc')
-select distinct class,'bc-'+cast(n as char(2))
-from a where numguns >= n
+104.with cte as (
+select class, cast(numGuns as int) ng, 'bc-' + cast(numGuns as  varchar(4)) num
+from dbo.Classes where type = 'bc' and numGuns > 0
+union all
+select class, ng - 1, 'bc-' + cast(ng - 1 as  varchar(4))
+from cte where ng > 1)
+select class, num from cte order by class, num
 105.Select
 	maker, 
 	model,
@@ -1159,3 +1160,286 @@ ctm as (select distinct maker from [dbo].[Product])
 select [ctm].[maker], sum(coalesce(pc,0)) as mc, count(price) as pc
 from ctm left join cta on [cta].[maker] = [ctm].[maker]
 group by [ctm].[maker]
+124.with	[cte]
+				as (select	[ID_psg], [ID_comp], max(count(*)) over (partition by [ID_psg]) as [mxctc],
+										min(count(*)) over (partition by [ID_psg]) as [mnctc], count(*) over (partition by [ID_psg]) as [cc]
+						from		[dbo].[Pass_in_trip]
+										join [dbo].[Trip] on [Trip].[trip_no] = [Pass_in_trip].[trip_no]
+						group by [ID_psg], [ID_comp])
+	select	[name]
+	from		[dbo].[Passenger]
+					join [cte] on [cte].[ID_psg] = [Passenger].[ID_psg]
+	where		[cte].[mxctc] = [cte].[mnctc] and [cte].[cc] >= 2
+	group by [Passenger].[ID_psg], [name]
+
+125.with cta as (
+select case when ca > ceiling((cc*1.0)/2) then cd * 2 else cc - cd + ca end as crn , 1 as tt,*
+from (select row_number() over(order by code) ca,	row_number() over(order by code desc) cd,	count(*) over() cc,
+	'Laptop' as type, [model], [price] from [dbo].[Laptop]) tr
+union
+select case when ca > ceiling((cc*1.0)/2) then cd * 2 else cc - cd + ca end as crn , 2 as tt,*
+from (select row_number() over(order by code) ca,	row_number() over(order by code desc) cd,	count(*) over() cc,
+	'PC' as type, [model], [price] from [dbo].PC) tr
+union
+select case when ca > ceiling((cc*1.0)/2) then cd * 2 else cc - cd + ca end as crn , 3 as tt,*
+from (select row_number() over(order by code) ca,	row_number() over(order by code desc) cd,	count(*) over() cc,
+	'Printer' as type, [model], [price] from [dbo].[Printer]) tr)
+select row_number() over(order by [cta].[crn], [cta].[tt]) id, [cta].[type], [cta].[model], [cta].[price]
+from cta
+order by crn, [cta].[tt]
+
+select * from (
+	select case when ca > ceiling((cc*1.0)/2) then cd * 2 else cc - cd + ca end as crn , 2 as tt,*
+from (select row_number() over(order by code) ca,	row_number() over(order by code desc) cd,	count(*) over() cc,
+	'PC' as type, [model], [price] from [dbo].PC) tr) tr1 order by [tr1].[crn]
+126.with cte as (select [ID_psg], count(*) as ct, max(count(*)) over() as mct
+from [dbo].[Pass_in_trip]
+group by [ID_psg]),
+ctf as (select cte.*, [dbo].[Passenger].[name] from cte join [dbo].[Passenger] on [Passenger].[ID_psg] = [cte].[ID_psg] where ct = mct),
+ctg as (select row_number() over(order by [ID_psg]) as rn, count(*) over() as cr,  [ID_psg], [name] from [dbo].[Passenger])
+select ctf.[name] as [psg],
+	case when ctg.[rn] = 1 
+		then (select name from ctg ga where ga.[rn] = ctg.[cr]) 
+		else (select name from ctg ga where ga.[rn] = ctg.[rn] - 1)
+	end as [prev],
+	case when ctg.[rn] = ctg.[cr]
+		then (select name from ctg ga where ga.[rn] = 1)
+		else (select name from ctg ga where ga.[rn] = ctg.[rn] + 1)
+	end as [next]
+from ctf join ctg on [ctg].[ID_psg] = [ctf].[ID_psg]
+127.with cte as (select
+(select top 1 price
+from [dbo].[Laptop] join [dbo].[Product] on [Product].[model] = [Laptop].[model]
+where [maker] in (
+select maker
+from pc join [dbo].[Product] on [Product].[model] = [PC].[model]
+where cd = (select min(cd) from pc)) order by price) [1],
+(select top 1 price
+from [dbo].[PC] join [dbo].[Product] on [Product].[model] = [PC].[model]
+where [maker] in (
+select maker
+from [dbo].[Printer] join [dbo].[Product] on [Product].[model] = [Printer].[model]
+where [price] = (select min([price]) from [dbo].[Printer])) order by price desc) [2],
+(select top 1 price
+from [dbo].[Printer] join [dbo].[Product] on [Product].[model] = [Printer].[model]
+where [maker] in (
+select maker
+from [dbo].[Laptop] join [dbo].[Product] on [Product].[model] = [Laptop].[model]
+where [ram] = (select max([ram]) from [dbo].[Laptop])) order by price desc) [3])
+select cast(val / iif([ca].[div] = 0, 1, [ca].[div]) as decimal(14, 2))
+from cte
+cross apply (
+select (coalesce([cte].[1], 0) * 1.0 + coalesce([cte].[2], 0) * 1.0 + coalesce([cte].[3], 0) * 1.0) as val,
+iif([cte].[1] is null, 0, 1) + iif([cte].[2] is null, 0, 1) + iif([cte].[3] is null, 0, 1) as [div]
+from cte) ca
+128.with
+cta as (
+select [point], [date], sum(out) s
+from outcome
+where [point] in (select point from [dbo].[Outcome_o])
+group by [point], [date]),
+
+ctb as (
+select [point], [date], sum(out) s
+from outcome_o
+where [point] in (select point from [dbo].[Outcome])
+group by [point], [date]),
+
+ctc as (select
+	coalesce([cta].[point], ctb.[point]) as point,
+	coalesce([cta].[date], [ctb].[date]) as [date],
+	coalesce([cta].[s], 0) as [sa],
+	coalesce([ctb].[s], 0) as [sb]
+from cta full join ctb on [ctb].[date] = [cta].[date] and [ctb].[point] = [cta].[point])
+select 
+	[ctc].[point],
+	[ctc].[date],
+	case
+		when sa > sb then 'more than once a day'
+		when sa < sb then 'once a day'
+		else 'both'
+	end lider
+from ctc
+order by [ctc].[point],[ctc].[date]
+129.select (
+select top 1 [mo].[Q_ID] + 1 id
+from [dbo].[utQ] mo
+where not exists (select  null from [dbo].[utQ] mi where mi.[Q_ID] = mo.[Q_ID] + 1)
+and [mo].[Q_ID] < (select max([Q_ID]) from [dbo].[utQ])
+order by [mo].[Q_ID]) minq,
+(
+select top 1 [mo].[Q_ID] - 1 id
+from [dbo].[utQ] mo
+where not exists (select  null from [dbo].[utQ] mi where mi.[Q_ID] = mo.[Q_ID] - 1)
+and [mo].[Q_ID] > (select min([Q_ID]) from [dbo].[utQ])
+order by [mo].[Q_ID] desc
+) maxq
+130.with cte as (select row_number() over(order by [date], name) rn, count(*) over() cnt, [date], [name]
+from [dbo].[Battles])
+select a.[rn], a.[name],a.[date],  b.[rn], b.[name], b.[date]
+from cte a left join cte b on a.[rn] = b.rn - ([b].cnt / 2 + b.cnt % 2)
+where a.[rn] <= a.cnt / 2 + a.cnt % 2
+131.with ctea as (
+select distinct town_from [town] from [dbo].[Trip] union select town_to from [dbo].[Trip]),
+cteb as (select 'a' s union all select 'e' union all select 'i' union all select 'o' union all select 'u'),
+ctec as (
+select [town], DATALENGTH([ctea].[town]) - DATALENGTH(replace([ctea].[town], s, '')) as cs
+from ctea, cteb),
+ctee as (select [town], [cs], count(*) over(partition by [ctec].[town]) cc,
+max(cs)  over(partition by [ctec].[town]) mxc, min(cs) over(partition by [ctec].[town]) mnc
+from ctec where cs > 0)
+select distinct town from ctee where cc > 1 and mxc = mnc
+132.with cte as (select [date] as date1, date2,
+	datediff(month, [date], date2) - 
+	iif(datepart(day, date2) < datepart(day, [date]) and 
+			datepart(day, [date]) <= datepart(day,eomonth(date2)), 1, 0)   as months
+from battles cross apply 
+(select coalesce(min(date), getdate()) date2 from battles b where b.date > battles.date) x)
+select
+	case
+		when months/12 > 0 then cast(months/12 as varchar(4)) + 
+			case when months - months/12 *12 > 0 then ' y., ' else ' y.' end
+		else '' end +
+	case when months - months/12 *12 > 0 then cast(months - months/12 * 12 as varchar(2)) + ' m.' else '' end  as age,
+	convert(varchar(10), [date1], 127) as date1,
+	convert(varchar(10), [date2], 127) as date2
+from cte
+133.select [cmp].[ID_comp] [top_id],
+coalesce((select '' + cast([ID_comp] as varchar(max)) 
+	from [dbo].[Company] a where a.[ID_comp] < [cmp].[ID_comp]
+	order by [a].[ID_comp] for xml path('')), '') + 
+	cast([cmp].[ID_comp] as varchar(max)) + 
+	coalesce((select '' + cast([ID_comp] as varchar(max)) 
+	from [dbo].[Company] a 
+	where a.[ID_comp] < [cmp].[ID_comp]
+	order by [a].[ID_comp] desc
+	for xml path('')), '') [hill]
+from [dbo].[Company] cmp
+134.WITH
+dsNeed AS
+    (SELECT
+         q.Q_ID,
+         q.col color,
+         255-SUM(COALESCE(b.B_VOL,0)) need,
+         SUM(255-SUM(COALESCE(b.B_VOL,0))) 
+               OVER (PARTITION BY q.col ORDER BY 
+                         255-SUM(COALESCE(b.B_VOL,0)), q.Q_ID
+                    ) sum
+     FROM
+         (SELECT Q_ID, Col 
+          FROM (SELECT
+                    Q_ID
+                FROM 
+                    utQ
+                ) t1
+                CROSS JOIN 
+               (SELECT 'R' Col
+                UNION ALL 
+                SELECT 'G' UNION ALL
+                SELECT 'B'
+               ) t2
+          )  q
+         LEFT JOIN 
+          (SELECT
+               v.V_COLOR,
+               b.B_Q_ID,
+               SUM(b.B_VOL) B_VOL
+           FROM
+              utB b,utV v
+              WHERE v.V_ID = b.B_V_ID  
+            GROUP BY 
+              v.V_COLOR,
+              b.B_Q_ID 
+           ) b
+         ON q.Q_ID = b.B_Q_ID AND b.V_COLOR = q.Col
+     GROUP BY
+         q.Q_ID,
+         q.col
+    ),
+
+dsHas AS
+    (SELECT
+         v.V_COLOR color,
+         COUNT(DISTINCT v.V_ID)*255 - SUM(COALESCE(b.B_VOL,0)) has
+     FROM
+         utV v
+         LEFT JOIN utB b
+         ON v.V_ID = b.B_V_ID         
+     GROUP BY
+         v.V_COLOR
+     )
+SELECT
+    DISTINCT dsNeed.Q_ID
+FROM 
+    dsNeed,
+    dsHas
+WHERE
+    dsNeed.color = dsHas.color and
+    dsNeed.sum > dsHas.has
+135.!!!!!!!!!!!!!
+136.SELECT
+name,
+PATINDEX('%[^A-Za-z]%', name) as npos,
+SUBSTRING(name, PATINDEX('%[^A-Za-z]%',
+name), 1) as litter
+FROM Ships
+WHERE PATINDEX('%[^A-Za-z]%', name) > 0
+137.SELECT mo.type,
+
+CASE
+WHEN mo.type = 'pc' THEN AVG(p.price)
+WHEN mo.type = 'laptop' THEN AVG(lap.price)
+WHEN mo.type = 'printer' THEN AVG(prin.price)
+END avg_price
+
+FROM
+(SELECT prod.model, prod.type, prod.num
+FROM
+(SELECT row_number() over(ORDER BY model ASC) num, model, type
+FROM Product) prod
+GROUP BY prod.model, prod.type, prod.num
+HAVING num%5 = 0) mo
+
+LEFT JOIN Pc p ON mo.model = p.model
+LEFT JOIN Laptop lap ON mo.model = lap.model
+LEFT JOIN Printer prin ON mo.model = prin.model
+
+GROUP BY mo.num, mo.type
+138.!!!!!!!!!!
+139.WITH
+dsShips AS
+   (SELECT name, 
+           IIF(launched IS NULL,
+               (SELECT MIN(s_in.launched) 
+                FROM Ships s_in 
+                WHERE s.class = s_in.name and 
+                      s_in.launched IS NOT NULL
+                ),
+                launched
+               ) launched_ship
+     FROM Ships s  
+)
+SELECT 
+     dsShips.name, 
+     STRING_AGG(b.name,',') WITHIN GROUP (ORDER BY b.date)       
+FROM 
+     dsShips 
+     LEFT JOIN Battles b 
+     ON YEAR(b.date) < dsShips.launched_ship 
+WHERE 
+    dsShips.name NOT IN (SELECT ship FROM Outcomes)
+GROUP BY dsShips.name
+140.!!!!
+141.!!!
+142.
+-- cost 0.0033108000643551 operations 2 
+select [b].[name],
+	format([b].[date],'yyyy-MM-dd'),
+	format(dateadd(dy,datediff(dy, '17530105', eomonth([b].[date],0))/7*7, '17530105'), 'yyyy-MM-dd') as [lf]
+from [dbo].[Battles] [b];
+
+--cost 0.0033108000643551 operations 2 
+select [b].[name],
+	convert(char(10), [b].[date],127) as [date],
+	convert(char(10), DATEADD(DY,DATEDIFF(DY,'17530105',DATEADD(MM,DATEDIFF(MM,0,[b].[date]),30))/7*7,'17530105'), 127) as [lf]
+from [dbo].[Battles] [b];
