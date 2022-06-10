@@ -1431,15 +1431,145 @@ WHERE
 GROUP BY dsShips.name
 140.!!!!
 141.!!!
-142.
--- cost 0.0033108000643551 operations 2 
-select [b].[name],
+142.select [p].[name]--, [t1].[pc], [t2].[tc]
+from [dbo].[Passenger] [p]
+cross apply (select count(distinct [plane]) as [pc] from [dbo].[Trip] [t] join [dbo].[Pass_in_trip] [pit] on [t].[trip_no] = [pit].[trip_no]
+			where [pit].[ID_psg] = [p].[ID_psg]) as t1
+cross apply (select count(ltrim(rtrim([t].[town_to]))) as [tc]
+			from [dbo].[Pass_in_trip] [pit] join [dbo].[Trip] [t] on [pit].[trip_no] = [t].[trip_no]
+			where [pit].[ID_psg] = [p].[ID_psg]
+			group by [t].[town_to]) as t2
+where [t1].[pc] = 1 and [t2].[tc] >= 2
+group by [p].[ID_psg],  [p].[name]
+143.select [b].[name],
 	format([b].[date],'yyyy-MM-dd'),
 	format(dateadd(dy,datediff(dy, '17530105', eomonth([b].[date],0))/7*7, '17530105'), 'yyyy-MM-dd') as [lf]
-from [dbo].[Battles] [b];
+from [dbo].[Battles] [b]
+144.WITH 
+dsMakersMaxPrice AS
+   (SELECT
+        p.maker        
+    FROM 
+        PC,
+        Product p
+    WHERE 
+        price in (SELECT MAX(price) FROM PC) AND
+        p.model = PC.model
+   ),
+dsMakersMinPrice AS
+   (SELECT
+        p.maker        
+    FROM 
+        PC,
+        Product p
+    WHERE 
+        price in (SELECT MIN(price) FROM PC) AND
+        p.model = PC.model
+   )
+SELECT
+    DISTINCT p.maker
+FROM 
+    Product p
+WHERE 
+    p.maker in (SELECT maker FROM dsMakersMinPrice) and
+    p.maker in (SELECT maker FROM dsMakersMaxPrice)
+145.!!!
+146.SELECT CHARACTER, VALUE
+FROM 
+(
+ SELECT CAST (model AS VARCHAR(MAX)) AS model,
+        CAST (speed AS VARCHAR(MAX)) AS speed,
+        CAST (ram AS VARCHAR(MAX)) AS ram,
+        CAST (hd AS VARCHAR(MAX)) AS hd,
+        CAST (cd AS VARCHAR(MAX)) AS cd,
+        CAST (ISNULL (CAST (price AS VARCHAR(MAX)) ,'') AS VARCHAR(MAX)) AS price 
+        
+ FROM PC 
+ WHERE code IN (SELECT MAX (code)
+                FROM PC)
+) chartable
+ 
+UNPIVOT
+( VALUE FOR CHARACTER IN (model,speed,ram,hd,cd,price)) AS unpvt
+147.SELECT count(*) OVER (order by c.countM DESC, c.maker,c.model) no, c.maker, c.model
+FROM (SELECT count(*) OVER(partition by maker) countM, maker,model
+      FROM product) c
+148.select [ship],
+stuff(
+	[ship],
+	charindex(' ', [ship]) + 1,
+	datalength([ship]) - charindex(' ',reverse([ship])) - charindex(' ', [ship]),
+	replicate('*', datalength([ship]) - charindex(' ',reverse([ship])) - charindex(' ', [ship]))) as [rt]
+from [dbo].[Outcomes] [o]
+where (datalength(ship) - datalength(replace(ship, ' ', '')) ) > 1
+149.!!!
+150.!!!
+151. with shipslist (shipname, launched, battlename, [date]) as
+(
+select ships.name as 'shipname', launched, battles.name as 'battlename', battles.[date] from ships left join battles
+on launched is null or launched <= datepart(year, [date])
+),
+battlelist (shipname, launched, battlename) as
+(
+select shipname, min(launched), (select top 1 battlename from shipslist l where outerlist.shipname = l.shipname order by [date] desc) from shipslist outerlist where launched IS NULL group by shipname
+UNION ALL
+select shipname, min(launched), (select top 1 battlename from shipslist l where outerlist.shipname = l.shipname order by ISNULL([date], '1800-01-01')) from shipslist outerlist where launched IS NOT NULL group by shipname
+)
+select * from battlelist
+152.WITH CTE AS
+(SELECT COUNT(model) grp FROM product WHERE type='printer'),
+CTE2 AS
+(SELECT xuy-(cte.grp*((xuy-1)/cte.grp)) num, model,type,2 pizda
+FROM (SELECT model, row_number() over(ORDER BY model) xuy, type FROM product WHERE type = 'pc')a,cte
+UNION ALL
+SELECT ROW_NUMBER() over(ORDER BY model), model,type, 1 FROM product WHERE type='printer')
 
---cost 0.0033108000643551 operations 2 
-select [b].[name],
-	convert(char(10), [b].[date],127) as [date],
-	convert(char(10), DATEADD(DY,DATEDIFF(DY,'17530105',DATEADD(MM,DATEDIFF(MM,0,[b].[date]),30))/7*7,'17530105'), 127) as [lf]
-from [dbo].[Battles] [b];
+SELECT row_number() over(ORDER BY num, pizda, model), model, type
+FROM CTE2 ORDER BY num, pizda, model
+153.with tab as (select p.id_psg, p.name, pit.trip_no, pit.date, pit.place,
+                    row_number() over(partition by p.id_psg order by pit.date, t.time_out) num
+             from passenger p
+                 join pass_in_trip pit on pit.id_psg = p.id_psg
+                 join trip t on t.trip_no = pit.trip_no)
+ 
+select t1.name
+from tab t1
+    join tab t2 on t2.id_psg = t1.id_psg and t2.place = t1.place and t2.num = t1.num + 1
+group by t1.id_psg, t1.name
+154.!!!
+155.with cte as (select trip_no,
+                    cast(trip_no as integer) num,
+                    cast('' as varchar(max)) str
+             from trip
+             union all
+             select trip_no, num / 2, concat(num % 2, str)
+             from cte
+             where num <> 0)
+ 
+select trip_no, str trip_no_bit
+from cte
+where num = 0
+156.WITH 
+dsQ AS
+(
+SELECT
+   ROW_NUMBER() OVER(ORDER BY q_id) - (ROW_NUMBER() OVER(ORDER BY q_id) + 2) % 3 id, 
+   IIF((ROW_NUMBER() OVER(ORDER BY q_id) + 2) % 3 = 0,q_id,0) id1,
+   IIF((ROW_NUMBER() OVER(ORDER BY q_id) + 1) % 3 = 0,q_id,0) id2,
+   IIF((ROW_NUMBER() OVER(ORDER BY q_id) + 0) % 3 = 0,q_id,0) id3
+FROM
+   utQ
+)
+SELECT 
+   IIF(SUM(id1) = 0,NULL,SUM(id1)), 
+   IIF(SUM(id2) = 0,NULL,SUM(id2)), 
+   IIF(SUM(id3) = 0,NULL,SUM(id3))
+FROM 
+   dsQ
+GROUP BY 
+   id
+157. (4 балл)
+158. !!!
+159. (4 балл)
+160. (4 балл)
+161.!!!
